@@ -1,0 +1,39 @@
+{
+  "name": "docuchat-rag",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fully client-side chat-with-your-documents RAG. No server, no vector DB.",
+  "scripts": {
+    "predev": "node scripts/copy-pdf-worker.mjs",
+    "dev": "next dev",
+    "prebuild": "node scripts/copy-pdf-worker.mjs",
+    "build": "next build",
+    "start": "npx --yes serve out",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.124.0",
+    "@huggingface/transformers": "3.8.1",
+    "idb": "8.0.3",
+    "lucide-react": "0.549.0",
+    "mammoth": "1.12.2",
+    "next": "15.5.25",
+    "pdfjs-dist": "5.7.284",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

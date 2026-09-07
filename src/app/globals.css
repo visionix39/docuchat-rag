@@ -1,0 +1,209 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #07070a;
+  --color-ink-900: #0b0b10;
+  --color-ink-850: #101017;
+  --color-ink-800: #16161f;
+  --color-ink-700: #1e1e29;
+  --color-ink-600: #2a2a38;
+  --color-ink-500: #3a3a4c;
+  --color-mist-500: #6f7185;
+  --color-mist-400: #8b8da3;
+  --color-mist-300: #adafc2;
+  --color-mist-100: #e9eaf2;
+
+  --color-iris-400: #a78bfa;
+  --color-iris-500: #8b5cf6;
+  --color-iris-600: #7c3aed;
+  --color-aqua-400: #22d3ee;
+  --color-aqua-500: #06b6d4;
+  --color-lime-400: #a3e635;
+  --color-amber-400: #fbbf24;
+  --color-rose-400: #fb7185;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-face), ui-monospace, monospace;
+
+  --radius-panel: 16px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  border-color: color-mix(in oklab, var(--color-ink-600) 70%, transparent);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-ink-950);
+  color: var(--color-mist-100);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A single soft light source, top-left, so panels read as layered glass. */
+.app-ambient::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 40rem at 12% -10%, color-mix(in oklab, var(--color-iris-600) 22%, transparent), transparent 70%),
+    radial-gradient(45rem 30rem at 92% 8%, color-mix(in oklab, var(--color-aqua-500) 12%, transparent), transparent 70%);
+}
+
+.panel {
+  background: color-mix(in oklab, var(--color-ink-850) 88%, transparent);
+  border: 1px solid color-mix(in oklab, #ffffff 7%, transparent);
+  border-radius: var(--radius-panel);
+  backdrop-filter: blur(14px);
+}
+
+.hairline {
+  border-color: color-mix(in oklab, #ffffff 7%, transparent);
+}
+
+.accent-text {
+  background: linear-gradient(100deg, var(--color-iris-400), var(--color-aqua-400));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-iris-500);
+  outline-offset: 2px;
+}
+
+/* Thin, low-contrast scrollbars — the content should be the only thing loud. */
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-600) transparent;
+}
+.scroll-slim::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: var(--color-ink-600);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.scroll-slim::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-500);
+  background-clip: padding-box;
+}
+
+/* Markdown answer body */
+.prose-answer {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--color-mist-100);
+}
+.prose-answer > * + * {
+  margin-top: 0.85em;
+}
+.prose-answer h1,
+.prose-answer h2,
+.prose-answer h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+.prose-answer h1 { font-size: 1.15rem; }
+.prose-answer h2 { font-size: 1.05rem; }
+.prose-answer h3 { font-size: 0.97rem; }
+.prose-answer ul,
+.prose-answer ol {
+  padding-left: 1.15rem;
+}
+.prose-answer ul { list-style: disc; }
+.prose-answer ol { list-style: decimal; }
+.prose-answer li + li { margin-top: 0.3em; }
+.prose-answer li::marker { color: var(--color-mist-500); }
+.prose-answer strong { color: #fff; font-weight: 600; }
+.prose-answer a { color: var(--color-aqua-400); text-decoration: underline; text-underline-offset: 2px; }
+.prose-answer code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--color-ink-800);
+  border: 1px solid var(--color-ink-700);
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+}
+.prose-answer pre {
+  background: var(--color-ink-900);
+  border: 1px solid var(--color-ink-700);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+}
+.prose-answer pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+.prose-answer blockquote {
+  border-left: 2px solid var(--color-iris-500);
+  padding-left: 0.9rem;
+  color: var(--color-mist-300);
+}
+.prose-answer table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+  display: block;
+  overflow-x: auto;
+}
+.prose-answer th,
+.prose-answer td {
+  border: 1px solid var(--color-ink-700);
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+}
+.prose-answer th { background: var(--color-ink-800); font-weight: 600; }
+.prose-answer hr { border-top: 1px solid var(--color-ink-700); }
+
+@keyframes caret-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+.caret {
+  display: inline-block;
+  width: 0.5ch;
+  height: 1.05em;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  background: var(--color-iris-400);
+  animation: caret-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: rise 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.slide-in-right { animation: slide-in-right 0.24s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .slide-in-right,
+  .caret {
+    animation: none;
+  }
+}
