@@ -131,15 +131,21 @@ npm run typecheck
 
 ## Deploying to Vercel
 
-Import the repository and accept the defaults — `vercel.json` already sets the build command and
-`out` as the output directory. Or from the CLI:
+Import the repository and accept the defaults. Or from the CLI:
 
 ```bash
 npx vercel deploy --prod
 ```
 
-No environment variables. No functions. Nothing to provision. If the repository root is the parent
-folder rather than this one, set the Vercel project's **Root Directory** to `docuchat-rag`.
+No environment variables. No functions. Nothing to provision.
+
+**Leave the Output Directory setting empty.** With the Next.js framework preset, Vercel reads
+`.next` and picks up `output: "export"` from `next.config.ts` on its own, serving the exported
+static files. Pointing it at `out` instead makes the build fail with
+`out/routes-manifest.json couldn't be found` — that manifest only ever exists in `.next`.
+
+If the repository root is the parent folder rather than this one, set the Vercel project's **Root
+Directory** to `docuchat-rag`.
 
 ## Models
 
