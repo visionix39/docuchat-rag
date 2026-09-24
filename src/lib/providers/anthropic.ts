@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { findChatModel } from "../models";
-import type { Completion } from "./types";
+import { resolveChatModel } from "../models";
+import type { Completion, ModelProbe } from "./types";
 
 const MAX_TOKENS = 16_000;
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
@@ -21,11 +21,11 @@ export const streamAnthropic: Completion = async function* ({
   showReasoning,
   signal,
 }) {
-  const spec = findChatModel(model);
+  const spec = resolveChatModel("anthropic", model);
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true, maxRetries: 1 });
 
   const thinking =
-    spec?.thinking === "adaptive"
+    spec.thinking === "adaptive"
       ? ({ type: "adaptive", display: showReasoning ? "summarized" : "omitted" } as const)
       : undefined;
 
@@ -36,9 +36,9 @@ export const streamAnthropic: Completion = async function* ({
       system,
       messages: turns,
       ...(thinking ? { thinking } : {}),
-      ...(spec?.thinking === "adaptive" ? { output_config: { effort } } : {}),
-      ...(spec?.supportsTemperature ? { temperature } : {}),
-      ...(spec?.serverFallbacks ? { betas: [FALLBACK_BETA], fallbacks: "default" as const } : {}),
+      ...(spec.thinking === "adaptive" ? { output_config: { effort } } : {}),
+      ...(spec.supportsTemperature ? { temperature } : {}),
+      ...(spec.serverFallbacks ? { betas: [FALLBACK_BETA], fallbacks: "default" as const } : {}),
     },
     { signal },
   );
@@ -71,4 +71,10 @@ export const streamAnthropic: Completion = async function* ({
     input: final.usage.input_tokens ?? 0,
     output: final.usage.output_tokens ?? 0,
   };
+};
+
+export const probeAnthropic: ModelProbe = async ({ apiKey, signal }) => {
+  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true, maxRetries: 0 });
+  const page = await client.models.list({ limit: 100 }, { signal });
+  return page.data.map((model) => ({ id: model.id, label: model.display_name || model.id }));
 };

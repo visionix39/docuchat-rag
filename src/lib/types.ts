@@ -59,7 +59,7 @@ export interface ChatMessage {
 
 export type RetrievalMode = "hybrid" | "semantic" | "keyword";
 export type EmbeddingMode = "local" | "none";
-export type ProviderId = "anthropic" | "openai";
+export type ProviderId = "anthropic" | "openai" | "google";
 
 export interface EmbeddingModelSpec {
   id: string;
@@ -88,15 +88,45 @@ export interface ChatModelSpec {
   supportsTemperature?: boolean;
   /** `adaptive` on 4.6+ models; older models take an explicit token budget. */
   thinking?: "adaptive" | "budget" | "none";
+  /** Gemini 2.5+ can return its thought summaries alongside the answer. */
+  supportsThoughts?: boolean;
+}
+
+export interface ProviderSpec {
+  id: ProviderId;
+  /** What a visitor calls it, not what the vendor calls itself. */
+  label: string;
+  vendor: string;
+  keyPlaceholder: string;
+  keyPattern: RegExp;
+  consoleUrl: string;
+  consoleLabel: string;
+  blurb: string;
+  /** Only the OpenAI-compatible path lets you repoint the endpoint. */
+  configurableBaseUrl?: boolean;
+  defaultBaseUrl?: string;
+}
+
+export interface ProviderCredentials {
+  key: string;
+  model: string;
+  baseUrl?: string;
+}
+
+export type KeyState = "unknown" | "checking" | "valid" | "invalid";
+
+export interface KeyStatus {
+  state: KeyState;
+  message?: string;
+  /** Model ids discovered from the provider with this key. */
+  models?: Array<{ id: string; label: string }>;
+  checkedAt?: number;
 }
 
 export interface Settings {
   provider: ProviderId;
-  anthropicKey: string;
-  anthropicModel: string;
-  openaiKey: string;
-  openaiModel: string;
-  openaiBaseUrl: string;
+  /** One credential set per provider, so switching doesn't lose a key. */
+  credentials: Record<ProviderId, ProviderCredentials>;
   persistKeys: boolean;
   embeddingMode: EmbeddingMode;
   embeddingModel: string;

@@ -23,12 +23,28 @@ export type StreamEvent =
 
 export type Completion = (request: CompletionRequest) => AsyncGenerator<StreamEvent>;
 
+export interface ProbeRequest {
+  apiKey: string;
+  baseUrl?: string;
+  signal?: AbortSignal;
+}
+
+/**
+ * Validates a key by listing the models it can reach. Every provider offers
+ * this as a free, non-generative call, so a visitor can confirm their key
+ * works without spending a token.
+ */
+export type ModelProbe = (request: ProbeRequest) => Promise<Array<{ id: string; label: string }>>;
+
 /** Turns provider SDK/HTTP failures into something worth showing a user. */
 export function describeError(error: unknown): string {
   if (error instanceof Error) {
     const message = error.message;
-    if (/401|invalid.*api.?key|authentication/i.test(message)) {
-      return "The API key was rejected. Check it in Settings.";
+    if (/401|403|invalid.*api.?key|api key not valid|authentication|permission/i.test(message)) {
+      return "That API key was rejected by the provider. Check you pasted it in full.";
+    }
+    if (/404|not found|is not supported|no such model/i.test(message)) {
+      return "That model isn't available on this key. Pick another from the model list.";
     }
     if (/429|rate.?limit/i.test(message)) {
       return "Rate limited by the provider. Wait a moment and retry.";

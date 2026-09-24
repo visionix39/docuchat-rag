@@ -67,9 +67,8 @@ export function ChatPane({
     if (node && pinnedRef.current) node.scrollTop = node.scrollHeight;
   }, [messages]);
 
-  const model = findChatModel(
-    settings.provider === "anthropic" ? settings.anthropicModel : settings.openaiModel,
-  );
+  const credentials = settings.credentials[settings.provider];
+  const model = findChatModel(credentials.model);
 
   const suggestions = useMemo(() => {
     if (!docs.length) return [];
@@ -98,8 +97,12 @@ export function ChatPane({
             onClick={onOpenSettings}
             className="focus-ring inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[11.5px] text-mist-300 transition-colors hover:border-iris-400/40 hover:text-white"
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-lime-400" />
-            {model?.label ?? "No model"}
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                credentials.key ? "bg-lime-400" : "bg-amber-400"
+              }`}
+            />
+            {model?.label ?? credentials.model}
           </button>
 
           <span className="hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[11.5px] text-mist-400 sm:inline-flex">

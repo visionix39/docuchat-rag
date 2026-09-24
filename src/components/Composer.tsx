@@ -1,7 +1,8 @@
 "use client";
 
 import { ArrowUp, Square } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { findProvider } from "@/lib/models";
 import { useStore } from "@/lib/store";
 
 export function Composer({ suggestions }: { suggestions?: string[] }) {
@@ -14,17 +15,38 @@ export function Composer({ suggestions }: { suggestions?: string[] }) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const hasKey = settings.provider === "anthropic" ? !!settings.anthropicKey : !!settings.openaiKey;
+  const hasKey = !!settings.credentials[settings.provider].key.trim();
   const inScope = docs.filter((doc) => doc.enabled).length;
   const blocked = !inScope || !hasKey;
 
-  // Grow with content up to a sensible ceiling, then scroll.
-  useEffect(() => {
+  const placeholder = !hasKey
+    ? `Add your ${findProvider(settings.provider).label} API key to start asking…`
+    : !inScope
+      ? "Upload a document to start asking questions…"
+      : `Ask anything about ${inScope === 1 ? "this document" : `these ${inScope} documents`}…`;
+
+  // Grow with content up to a sensible ceiling, then scroll. Collapsing to 0
+  // before measuring avoids inheriting the previous height, which a flex item
+  // can otherwise keep reporting.
+  const resize = useCallback(() => {
     const node = textareaRef.current;
     if (!node) return;
-    node.style.height = "auto";
-    node.style.height = `${Math.min(node.scrollHeight, 200)}px`;
-  }, [value]);
+    node.style.height = "0px";
+    node.style.height = `${Math.min(Math.max(node.scrollHeight, 40), 200)}px`;
+  }, []);
+
+  useLayoutEffect(resize, [resize, value, placeholder]);
+
+  // Re-measure once after the first paint: on mount the measurement can land
+  // before fonts and layout have settled, which would pin the box open.
+  useEffect(() => {
+    const frame = requestAnimationFrame(resize);
+    window.addEventListener("resize", resize);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", resize);
+    };
+  }, [resize]);
 
   const submit = () => {
     const question = value.trim();
@@ -32,12 +54,6 @@ export function Composer({ suggestions }: { suggestions?: string[] }) {
     setValue("");
     void ask(question);
   };
-
-  const placeholder = !inScope
-    ? "Upload a document to start asking questions…"
-    : !hasKey
-      ? "Add your API key in Settings to start asking…"
-      : `Ask anything about ${inScope === 1 ? "this document" : `these ${inScope} documents`}…`;
 
   return (
     <div className="space-y-2.5">

@@ -1,13 +1,12 @@
 "use client";
 
-import { Eye, EyeOff, ExternalLink, ShieldAlert, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { ShieldAlert, Trash2 } from "lucide-react";
+import { ApiKeySetup } from "@/components/ApiKeySetup";
 import { Button } from "@/components/ui/Button";
 import { Field, inputClass, Segmented, Slider, Switch } from "@/components/ui/Field";
 import { Sheet } from "@/components/ui/Sheet";
-import { CHAT_MODELS, EMBEDDING_MODELS, findChatModel, findEmbeddingModel } from "@/lib/models";
+import { EMBEDDING_MODELS, findEmbeddingModel, resolveChatModel } from "@/lib/models";
 import { useStore } from "@/lib/store";
-import type { ProviderId } from "@/lib/types";
 
 function SectionTitle({ children }: { children: string }) {
   return (
@@ -25,12 +24,7 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
   const docCount = useStore((state) => state.docs.length);
   const notify = useStore((state) => state.notify);
 
-  const [revealKey, setRevealKey] = useState(false);
-  const model = findChatModel(
-    settings.provider === "anthropic" ? settings.anthropicModel : settings.openaiModel,
-  );
-  const isAnthropic = settings.provider === "anthropic";
-  const providerModels = CHAT_MODELS.filter((entry) => entry.provider === settings.provider);
+  const model = resolveChatModel(settings.provider, settings.credentials[settings.provider].model);
 
   return (
     <Sheet
@@ -42,139 +36,40 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
     >
       <div className="space-y-8">
         <section>
-          <SectionTitle>Model</SectionTitle>
+          <SectionTitle>Your API key</SectionTitle>
+          <ApiKeySetup />
+        </section>
+
+        <section>
+          <SectionTitle>Answering</SectionTitle>
           <div className="space-y-4">
-            <Field label="Provider">
-              <Segmented<ProviderId>
-                value={settings.provider}
-                onChange={(provider) => setSettings({ provider })}
-                options={[
-                  { value: "anthropic", label: "Anthropic" },
-                  { value: "openai", label: "OpenAI-compatible" },
-                ]}
-              />
-            </Field>
-
-            <Field
-              label="API key"
-              hint={
-                <span className="inline-flex flex-wrap items-center gap-1">
-                  Sent directly from your browser to{" "}
-                  {isAnthropic ? "api.anthropic.com" : "your chosen endpoint"} — never to any server
-                  of ours.
-                  <a
-                    href={
-                      isAnthropic
-                        ? "https://console.anthropic.com/settings/keys"
-                        : "https://platform.openai.com/api-keys"
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-0.5 text-aqua-400 hover:underline"
-                  >
-                    Get a key <ExternalLink className="h-3 w-3" />
-                  </a>
-                </span>
-              }
-              action={
-                <button
-                  type="button"
-                  onClick={() => setRevealKey((value) => !value)}
-                  className="focus-ring inline-flex items-center gap-1 rounded px-1 text-[11px] text-mist-500 hover:text-mist-200"
-                >
-                  {revealKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                  {revealKey ? "Hide" : "Show"}
-                </button>
-              }
-            >
-              <input
-                type={revealKey ? "text" : "password"}
-                autoComplete="off"
-                spellCheck={false}
-                className={`${inputClass} font-mono text-[13px]`}
-                placeholder={isAnthropic ? "sk-ant-…" : "sk-…"}
-                value={isAnthropic ? settings.anthropicKey : settings.openaiKey}
-                onChange={(event) =>
-                  setSettings(
-                    isAnthropic
-                      ? { anthropicKey: event.target.value }
-                      : { openaiKey: event.target.value },
-                  )
-                }
-              />
-            </Field>
-
-            <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-3">
+            {model.thinking === "adaptive" || model.supportsThoughts ? (
               <Switch
-                checked={settings.persistKeys}
-                onChange={(persistKeys) => setSettings({ persistKeys })}
-                label="Remember this key across reloads"
-                hint="Stores it in this browser's localStorage. Convenient on your own machine; leave it off on a shared one — the key then lives in memory only and clears when the tab closes."
+                checked={settings.showReasoning}
+                onChange={(showReasoning) => setSettings({ showReasoning })}
+                label="Show reasoning summary"
+                hint="Streams a readable summary of the model's reasoning above each answer."
               />
-            </div>
+            ) : null}
 
-            <Field label="Model">
-              <select
-                className={inputClass}
-                value={isAnthropic ? settings.anthropicModel : settings.openaiModel}
-                onChange={(event) =>
-                  setSettings(
-                    isAnthropic
-                      ? { anthropicModel: event.target.value }
-                      : { openaiModel: event.target.value },
-                  )
-                }
-              >
-                {providerModels.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.label} — {entry.contextLabel}
-                    {entry.inputPerMTok
-                      ? ` · $${entry.inputPerMTok}/$${entry.outputPerMTok} per Mtok`
-                      : ""}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            {!isAnthropic ? (
+            {model.thinking === "adaptive" ? (
               <Field
-                label="Base URL"
-                hint="Any OpenAI-compatible /chat/completions endpoint — OpenAI, Groq, Together, OpenRouter, or a local server. The endpoint must send permissive CORS headers to be callable from a browser."
+                label="Reasoning effort"
+                hint="How much thinking the model spends before answering. Medium suits most document questions; high pays off on cross-document synthesis."
               >
-                <input
-                  className={`${inputClass} font-mono text-[13px]`}
-                  value={settings.openaiBaseUrl}
-                  onChange={(event) => setSettings({ openaiBaseUrl: event.target.value })}
+                <Segmented
+                  value={settings.effort}
+                  onChange={(effort) => setSettings({ effort })}
+                  options={[
+                    { value: "low" as const, label: "low" },
+                    { value: "medium" as const, label: "medium" },
+                    { value: "high" as const, label: "high" },
+                  ]}
                 />
               </Field>
             ) : null}
 
-            {model?.thinking === "adaptive" ? (
-              <>
-                <Field
-                  label="Reasoning effort"
-                  hint="How much thinking the model spends before answering. Medium suits most document questions; high pays off on cross-document synthesis."
-                >
-                  <Segmented
-                    value={settings.effort}
-                    onChange={(effort) => setSettings({ effort })}
-                    options={[
-                      { value: "low" as const, label: "low" },
-                      { value: "medium" as const, label: "medium" },
-                      { value: "high" as const, label: "high" },
-                    ]}
-                  />
-                </Field>
-                <Switch
-                  checked={settings.showReasoning}
-                  onChange={(showReasoning) => setSettings({ showReasoning })}
-                  label="Show reasoning summary"
-                  hint="Streams a readable summary of the model's reasoning above each answer."
-                />
-              </>
-            ) : null}
-
-            {model?.supportsTemperature ? (
+            {model.supportsTemperature ? (
               <Field
                 label={`Temperature — ${settings.temperature.toFixed(2)}`}
                 hint="Low values keep answers close to the source text."

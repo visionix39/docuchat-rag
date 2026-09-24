@@ -4,6 +4,11 @@ Upload a PDF, DOCX or text file and ask questions about it. Parsing, chunking, e
 storage and retrieval all happen **inside the browser tab**. There is no backend, no vector database
 and nothing to pay for besides your own model API key.
 
+**Every visitor brings their own key.** Nothing is deployed with credentials in it. On first load the
+app asks which provider you want — **Claude**, **GPT** or **Gemini** — takes a key from your own
+account, and offers a one-click *Test key* that confirms it works without spending a token. The key
+is held in memory for the tab unless you explicitly ask the browser to remember it.
+
 Deploys to Vercel as a pure static site — `next build` emits a folder of HTML/JS/CSS and Vercel
 serves it from the CDN. Zero serverless functions, so it runs comfortably on the free tier and needs
 no Railway/Render/Fly companion service.
@@ -23,7 +28,7 @@ Question ──► expand ──► embed query ──► hybrid search ──�
                                         de-duped with MMR
                                                   │
                                                   ▼
-                            your API key ──► Claude / OpenAI-compatible
+                          visitor's own key ──► Claude / GPT / Gemini
                                                   │
                                                   ▼
                                   streamed answer + clickable citations
@@ -66,6 +71,26 @@ answer isn't in the document.
 
 ---
 
+## Bringing your own key
+
+| Provider | Key from | Looks like | Notes |
+|---|---|---|---|
+| **Claude** | [console.anthropic.com](https://console.anthropic.com/settings/keys) | `sk-ant-…` | Adaptive thinking with a streamed reasoning summary and an effort control. |
+| **GPT** | [platform.openai.com](https://platform.openai.com/api-keys) | `sk-proj-…` | Also accepts any OpenAI-compatible base URL — Groq, Together, OpenRouter, a local server. |
+| **Gemini** | [aistudio.google.com](https://aistudio.google.com/app/apikey) | `AIza…` | Has a free tier, so it is the cheapest way to try the app end to end. |
+
+All three are reachable directly from a browser — verified against each provider's live endpoint —
+so no proxy is needed and the static deploy stays a static deploy.
+
+**Test key** calls each provider's *list models* endpoint. That is free on all three, so it proves
+the key works without generating a token, and the response repopulates the model picker with
+whatever that account can actually reach. A model that isn't in the built-in table still gets the
+right request shape: current Claude models are sent with adaptive thinking and no `temperature`
+(which they reject), Gemini 2.5+ is asked for thought summaries, and anything else falls back to
+plain sampling. You can also type a model ID by hand.
+
+A key is kept per provider, so switching between Claude and Gemini doesn't lose the other one.
+
 ## Privacy model
 
 Worth being precise, because "client-side" gets used loosely:
@@ -74,9 +99,12 @@ Worth being precise, because "client-side" gets used loosely:
 - **Leaves your browser:** the handful of retrieved passages plus your question, sent directly from
   the page to the model provider with your API key. Nothing passes through any server of ours —
   there isn't one.
-- **The API key** is held in memory for the tab's lifetime by default. The "remember this key"
-  toggle stores it in `localStorage`, which is convenient on your own machine and a bad idea on a
-  shared one. The app never transmits the key anywhere except the provider you selected.
+- **The API key** is the visitor's own — the repository and the deployed bundle contain no
+  credentials of any kind. It is held in memory for the tab's lifetime by default. The "remember
+  this key" toggle stores it in `localStorage`, which is convenient on your own machine and a bad
+  idea on a shared one. The app never transmits the key anywhere except the provider you selected,
+  and the Gemini key travels in an `x-goog-api-key` header rather than the `?key=` query parameter
+  Google's quickstarts use, so it stays out of logs and history.
 - **Model weights** are fetched from the Hugging Face CDN on first use and cached by the browser.
 
 Anthropic requests use the official SDK with `dangerouslyAllowBrowser: true`. That flag exists to
@@ -115,15 +143,12 @@ folder rather than this one, set the Vercel project's **Root Directory** to `doc
 
 ## Models
 
-Chat models are listed in [`src/lib/models.ts`](src/lib/models.ts) with per-million-token pricing
-used for the in-app cost estimate. Anthropic frontier models run with adaptive thinking and an
-`effort` control, and reject a `temperature` parameter — so the slider is hidden for them rather
-than sent and rejected. Claude Opus 5 requests opt into server-side refusal fallbacks, and a refusal
-is rendered as a clear message instead of an empty bubble.
+Chat models and the provider registry live in [`src/lib/models.ts`](src/lib/models.ts), with
+per-million-token pricing used for the in-app cost estimate. Claude Opus 5 requests opt into
+server-side refusal fallbacks, and a refusal renders as a clear message instead of an empty bubble.
 
-The OpenAI path targets any OpenAI-compatible `/chat/completions` endpoint — OpenAI, Groq, Together,
-OpenRouter, or a local server. The endpoint must send permissive CORS headers to be callable from a
-browser; most hosted ones do, many self-hosted ones need a flag.
+An OpenAI-compatible endpoint must send permissive CORS headers to be callable from a browser; most
+hosted ones do, many self-hosted ones need a flag.
 
 ## Known limits
 
@@ -141,6 +166,7 @@ browser; most hosted ones do, many self-hosted ones need a flag.
 src/
   app/                 Next.js app router shell (one static page)
   components/          UI — sidebar, chat, settings, source drawer
+    ApiKeySetup.tsx    provider picker, key entry and the free "Test key" check
   lib/
     extract.ts         PDF/DOCX/text → text + page offsets
     chunker.ts         recursive splitter with character-level overlap
@@ -151,7 +177,7 @@ src/
     embedder.ts        typed proxy to the embedding worker
     idb.ts             IndexedDB persistence
     prompt.ts          system prompts, numbered context, citations
-    providers/         Anthropic SDK + OpenAI-compatible SSE
+    providers/         Anthropic SDK, OpenAI-compatible SSE, Gemini SSE + key probes
     store.ts           zustand store: ingest and ask pipelines
   workers/
     embed.worker.ts    transformers.js feature extraction off the main thread

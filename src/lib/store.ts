@@ -6,23 +6,34 @@ import { chunkText } from "./chunker";
 import { embedQuery, embedTexts, isEmbeddingSupported, loadEmbedder } from "./embedder";
 import { extractFile, isSupported, pageForOffset } from "./extract";
 import * as idb from "./idb";
-import { findEmbeddingModel } from "./models";
+import { DEFAULT_MODEL, findEmbeddingModel, findProvider } from "./models";
 import { buildContext, buildUserTurn, SYSTEM_PROMPT_OPEN, SYSTEM_PROMPT_STRICT } from "./prompt";
-import { completions, describeError } from "./providers";
+import { completions, describeError, probes } from "./providers";
 import { expandQuery, retrieve } from "./retriever";
 import { estimateTokens } from "./tokenize";
-import type { ChatMessage, Chunk, Citation, DocMeta, Settings } from "./types";
+import type {
+  ChatMessage,
+  Chunk,
+  Citation,
+  DocMeta,
+  KeyStatus,
+  ProviderCredentials,
+  ProviderId,
+  Settings,
+} from "./types";
 
 const SETTINGS_KEY = "docuchat.settings.v1";
 const CHAT_KEY = "chat.messages.v1";
 
+export const EMPTY_CREDENTIALS: Record<ProviderId, ProviderCredentials> = {
+  anthropic: { key: "", model: DEFAULT_MODEL.anthropic },
+  openai: { key: "", model: DEFAULT_MODEL.openai, baseUrl: "https://api.openai.com/v1" },
+  google: { key: "", model: DEFAULT_MODEL.google },
+};
+
 export const DEFAULT_SETTINGS: Settings = {
   provider: "anthropic",
-  anthropicKey: "",
-  anthropicModel: "claude-opus-5",
-  openaiKey: "",
-  openaiModel: "gpt-4.1-mini",
-  openaiBaseUrl: "https://api.openai.com/v1",
+  credentials: EMPTY_CREDENTIALS,
   persistKeys: false,
   embeddingMode: "local",
   embeddingModel: "Xenova/all-MiniLM-L6-v2",
@@ -64,8 +75,12 @@ interface State {
   activeCitation: Citation | null;
   storage: { usage: number; quota: number } | null;
 
+  keyStatus: Record<ProviderId, KeyStatus>;
+
   hydrate: () => Promise<void>;
   setSettings: (patch: Partial<Settings>) => void;
+  setCredentials: (provider: ProviderId, patch: Partial<ProviderCredentials>) => void;
+  verifyKey: (provider: ProviderId) => Promise<boolean>;
   ingest: (files: File[]) => Promise<void>;
   removeDoc: (id: string) => Promise<void>;
   toggleDoc: (id: string) => Promise<void>;
@@ -90,7 +105,25 @@ function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<Settings>) };
+    const stored = JSON.parse(raw) as Partial<Settings>;
+    const merged: Settings = {
+      ...DEFAULT_SETTINGS,
+      ...stored,
+      // Merge per provider so a settings file written before a provider
+      // existed doesn't wipe the others' defaults.
+      credentials: {
+        anthropic: { ...EMPTY_CREDENTIALS.anthropic, ...stored.credentials?.anthropic },
+        openai: { ...EMPTY_CREDENTIALS.openai, ...stored.credentials?.openai },
+        google: { ...EMPTY_CREDENTIALS.google, ...stored.credentials?.google },
+      },
+    };
+
+    // Drop fields this version no longer knows about. Older builds kept keys
+    // in top-level `anthropicKey` / `openaiKey`; without this they would sit
+    // in localStorage forever, even with "remember my key" switched off.
+    return Object.fromEntries(
+      (Object.keys(DEFAULT_SETTINGS) as Array<keyof Settings>).map((key) => [key, merged[key]]),
+    ) as unknown as Settings;
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -102,7 +135,14 @@ function saveSettings(settings: Settings) {
   // live in memory for the tab's lifetime and nowhere else.
   const persisted: Settings = settings.persistKeys
     ? settings
-    : { ...settings, anthropicKey: "", openaiKey: "" };
+    : {
+        ...settings,
+        credentials: {
+          anthropic: { ...settings.credentials.anthropic, key: "" },
+          openai: { ...settings.credentials.openai, key: "" },
+          google: { ...settings.credentials.google, key: "" },
+        },
+      };
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(persisted));
   } catch {
@@ -124,6 +164,7 @@ export const useStore = create<State>((set, get) => ({
   generating: false,
   activeCitation: null,
   storage: null,
+  keyStatus: { anthropic: { state: "unknown" }, openai: { state: "unknown" }, google: { state: "unknown" } },
 
   notify: (tone, message) => {
     const id = uid();
@@ -161,6 +202,89 @@ export const useStore = create<State>((set, get) => ({
     const settings = { ...get().settings, ...patch };
     saveSettings(settings);
     set({ settings });
+  },
+
+  setCredentials: (provider, patch) => {
+    const current = get().settings;
+    const settings: Settings = {
+      ...current,
+      credentials: {
+        ...current.credentials,
+        [provider]: { ...current.credentials[provider], ...patch },
+      },
+    };
+    saveSettings(settings);
+
+    // Editing the key or endpoint invalidates whatever the last check said.
+    const resetStatus = "key" in patch || "baseUrl" in patch;
+    set((state) => ({
+      settings,
+      keyStatus: resetStatus
+        ? { ...state.keyStatus, [provider]: { state: "unknown" } }
+        : state.keyStatus,
+    }));
+  },
+
+  /**
+   * Confirms a key works by listing the models it can reach — a free call on
+   * all three providers, so a visitor can check their key without being
+   * billed for a token. The result also refreshes the model picker, which
+   * keeps it honest as providers add and retire models.
+   */
+  verifyKey: async (provider) => {
+    const credentials = get().settings.credentials[provider];
+    const spec = findProvider(provider);
+
+    if (!credentials.key.trim()) {
+      set((state) => ({
+        keyStatus: {
+          ...state.keyStatus,
+          [provider]: { state: "invalid", message: `Paste a ${spec.vendor} key first.` },
+        },
+      }));
+      return false;
+    }
+
+    set((state) => ({
+      keyStatus: { ...state.keyStatus, [provider]: { state: "checking" } },
+    }));
+
+    try {
+      const models = await probes[provider]({
+        apiKey: credentials.key.trim(),
+        baseUrl: credentials.baseUrl,
+      });
+
+      set((state) => ({
+        keyStatus: {
+          ...state.keyStatus,
+          [provider]: {
+            state: "valid",
+            message: models.length
+              ? `Key works — ${models.length} models available.`
+              : "Key works.",
+            models,
+            checkedAt: Date.now(),
+          },
+        },
+      }));
+
+      // If the stored model isn't on this key, fall back to one that is.
+      if (models.length && !models.some((model) => model.id === credentials.model)) {
+        const preferred =
+          models.find((model) => model.id === DEFAULT_MODEL[provider]) ?? models[0];
+        get().setCredentials(provider, { model: preferred.id });
+      }
+      return true;
+    } catch (error) {
+      set((state) => ({
+        keyStatus: {
+          ...state.keyStatus,
+          [provider]: { state: "invalid", message: describeError(error), checkedAt: Date.now() },
+        },
+      }));
+      return false;
+    }
   },
 
   ingest: async (files) => {
@@ -310,9 +434,13 @@ export const useStore = create<State>((set, get) => ({
     const trimmed = question.trim();
     if (!trimmed || get().generating) return;
 
-    const apiKey = settings.provider === "anthropic" ? settings.anthropicKey : settings.openaiKey;
+    const credentials = settings.credentials[settings.provider];
+    const apiKey = credentials.key.trim();
     if (!apiKey) {
-      notify("error", "Add an API key in Settings before asking a question.");
+      notify(
+        "error",
+        `Add your own ${findProvider(settings.provider).vendor} API key before asking a question.`,
+      );
       return;
     }
     if (!docs.some((doc) => doc.enabled)) {
@@ -395,13 +523,13 @@ export const useStore = create<State>((set, get) => ({
 
       const stream = completions[settings.provider]({
         apiKey,
-        model: settings.provider === "anthropic" ? settings.anthropicModel : settings.openaiModel,
+        model: credentials.model,
         system: settings.strictGrounding ? SYSTEM_PROMPT_STRICT : SYSTEM_PROMPT_OPEN,
         turns: [...history, { role: "user", content: buildUserTurn(trimmed, block) }],
         temperature: settings.temperature,
         effort: settings.effort,
         showReasoning: settings.showReasoning,
-        baseUrl: settings.openaiBaseUrl,
+        baseUrl: credentials.baseUrl,
         signal: controller.signal,
       });
 

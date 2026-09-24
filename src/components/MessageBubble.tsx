@@ -40,9 +40,7 @@ function CopyButton({ text }: { text: string }) {
 
 function RetrievalMeta({ message }: { message: ChatMessage }) {
   const settings = useStore((state) => state.settings);
-  const model = findChatModel(
-    settings.provider === "anthropic" ? settings.anthropicModel : settings.openaiModel,
-  );
+  const model = findChatModel(settings.credentials[settings.provider].model);
   const spend =
     message.usage && model?.inputPerMTok && model?.outputPerMTok
       ? (message.usage.input / 1e6) * model.inputPerMTok +
