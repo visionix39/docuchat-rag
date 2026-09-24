@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
+  "//": "Deployed as a plain static site, not through Vercel's Next.js builder. next.config.ts uses output: 'export', so `npm run build` emits a self-contained folder of HTML/JS/CSS in out/ with no server side at all. Declaring framework/buildCommand/outputDirectory here makes the config self-consistent and overrides whatever the project's dashboard settings say, so a stale Output Directory can't break the build.",
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "out",
   "headers": [
     {
       "source": "/(.*)",
